@@ -2,4 +2,3 @@
 allow_duplicates: yes
 dependencies:
 - { role: letsencrypt }
-- { role: freebsd/firewall/pf, when: ansible_os_family == 'FreeBSD' }
