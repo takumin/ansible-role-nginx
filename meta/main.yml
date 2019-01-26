@@ -1,4 +1,9 @@
 ---
-allow_duplicates: yes
+galaxy_info:
+  author: Takumi Takahashi
+  description: nginx role
+  license: license (MIT)
+  min_ansible_version: 2.4
+  galaxy_tags: []
 dependencies:
 - { role: letsencrypt }
