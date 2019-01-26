@@ -1,0 +1,23 @@
+# {{ ansible_managed }}
+#
+
+user {{ nginx_vars.owner }} {{ nginx_vars.group }};
+worker_processes {{ nginx.worker_processes }};
+
+error_log {{ nginx_vars.log_dir }}/error.log;
+{% if nginx_vars.pid_path %}
+pid {{ nginx_vars.pid_path }};
+{% endif %}
+
+events {
+	worker_connections {{ nginx.worker_connections }};
+	use {{ nginx_vars.event_notify }};
+}
+
+http {
+	include    {{ nginx_vars.conf_dir }}/mime.types;
+	access_log {{ nginx_vars.log_dir }}/access.log;
+
+	include {{ nginx_vars.conf_dir }}/conf.d/*.conf;
+	include {{ nginx_vars.conf_dir }}/sites-enabled/*.conf;
+}

@@ -1,0 +1,13 @@
+# {{ ansible_managed }}
+#
+
+{% if nginx.upstream is defined %}
+# nginx upstream configuration
+{%   for key in nginx.upstream %}
+upstream {{ key }} {
+{%     for server in nginx.upstream[key]['server'] %}
+  server {{ server }};
+{%     endfor %}
+}
+{%   endfor %}
+{% endif %}

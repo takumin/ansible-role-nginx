@@ -1,0 +1,418 @@
+---
+- block:
+  - include_vars: '{{ item }}'
+    with_first_found:
+    - '{{ ansible_distribution.lower() }}.yml'
+    - '{{ ansible_os_family.lower() }}.yml'
+    - '{{ ansible_system.lower() }}.yml'
+    - 'default.yml'
+    tags:
+    - letsencrypt
+
+  - block:
+    - name: 'keyring directory'
+      file:
+        state: 'directory'
+        path:  '/etc/apt/additional.gpg.d'
+        owner: '{{ nginx_vars.root_owner }}'
+        group: '{{ nginx_vars.root_group }}'
+        mode:  '0755'
+
+    - name: 'download keyring'
+      get_url:
+        url:  'https://sks-keyservers.net/pks/lookup?op=get&options=mr&search=0x573BFD6B3D8FBC641079A6ABABF5BD827BD9BF62'
+        dest: '/etc/apt/additional.gpg.d/nginx.gpg'
+        mode: '0444'
+      environment: '{{ proxy_environment | default({}) }}'
+
+    - name: 'nginx mainline keyring'
+      apt_key:
+        file: '/etc/apt/additional.gpg.d/nginx.gpg'
+        id:   '573BFD6B3D8FBC641079A6ABABF5BD827BD9BF62'
+
+    - name: 'nginx mainline repository'
+      template:
+        src:   'apt.list.j2'
+        dest:  '/etc/apt/sources.list.d/nginx.list'
+        owner: '{{ nginx_vars.root_owner }}'
+        group: '{{ nginx_vars.root_group }}'
+        mode:  '0444'
+      register: apt_repo
+
+    - name: 'apt repository update'
+      apt: update_cache=yes
+      when: apt_repo.changed
+
+    # block
+    when: ansible_distribution == 'Debian' or ansible_distribution == 'Ubuntu'
+
+  - name: 'package installed ( {{ nginx_vars.package }} )'
+    package:
+      name:  '{{ nginx_vars.package }}'
+      state: present
+    register: package_installed
+
+  - name: 'tmpfiles.d entry'
+    copy:
+      content: 'd {{ nginx_vars.log_dir }} 0755 {{ nginx_vars.root_owner }} {{ nginx_vars.root_group }}'
+      dest:    '/etc/tmpfiles.d/nginx'
+      owner:   '{{ nginx_vars.root_owner }}'
+      group:   '{{ nginx_vars.root_group }}'
+      mode:    '0444'
+    when:
+    - ansible_service_mgr == 'systemd'
+
+  - name: 'require directory'
+    file:
+      path:  '{{ item.path }}'
+      state: 'directory'
+      owner: '{{ item.owner }}'
+      group: '{{ item.group }}'
+      mode:  '{{ item.mode }}'
+    with_items:
+    - path:  '{{ nginx_vars.conf_dir }}'
+      owner: '{{ nginx_vars.root_owner }}'
+      group: '{{ nginx_vars.root_group }}'
+      mode:  '0755'
+    - path:  '{{ nginx_vars.conf_dir }}/conf.d'
+      owner: '{{ nginx_vars.root_owner }}'
+      group: '{{ nginx_vars.root_group }}'
+      mode:  '0755'
+    - path:  '{{ nginx_vars.conf_dir }}/sites-available'
+      owner: '{{ nginx_vars.root_owner }}'
+      group: '{{ nginx_vars.root_group }}'
+      mode:  '0755'
+    - path:  '{{ nginx_vars.conf_dir }}/sites-enabled'
+      owner: '{{ nginx_vars.root_owner }}'
+      group: '{{ nginx_vars.root_group }}'
+      mode:  '0755'
+    - path:  '{{ nginx_vars.log_dir }}'
+      owner: '{{ nginx_vars.root_owner }}'
+      group: '{{ nginx_vars.root_group }}'
+      mode:  '0755'
+    - path:  '{{ nginx_vars.cache_dir }}'
+      owner: '{{ nginx_vars.owner }}'
+      group: '{{ nginx_vars.group }}'
+      mode:  '0700'
+
+  - name: 'get global extra config directory list'
+    find:
+      paths:     '{{ nginx_vars.conf_dir }}/conf.d'
+      file_type: 'directory'
+    register: global_extra_config_dir_list
+
+  - name: 'get vhost available config directory list'
+    find:
+      paths:     '{{ nginx_vars.conf_dir }}/sites-available'
+      file_type: 'directory'
+    register: vhost_available_config_dir_list
+
+  - name: 'get vhost enabled config directory list'
+    find:
+      paths:     '{{ nginx_vars.conf_dir }}/sites-enabled'
+      file_type: 'directory'
+    register: vhost_enabled_config_dir_list
+
+  - name: 'cleanup global extra config directory'
+    file:
+      state: 'absent'
+      path:  '{{ item }}'
+    notify:
+    - 'restarted service : nginx'
+    with_items: '{{ global_extra_config_dir_list.files | map(attribute="path") | list }}'
+
+  - name: 'cleanup available config config directory'
+    file:
+      state: 'absent'
+      path:  '{{ item }}'
+    notify:
+    - 'restarted service : nginx'
+    with_items: '{{ vhost_available_config_dir_list.files | map(attribute="path") | list }}'
+
+  - name: 'cleanup enabled config config directory'
+    file:
+      state: 'absent'
+      path:  '{{ item }}'
+    notify:
+    - 'restarted service : nginx'
+    with_items: '{{ vhost_enabled_config_dir_list.files | map(attribute="path") | list }}'
+
+  - name: 'get global extra config file list'
+    find:
+      paths:     '{{ nginx_vars.conf_dir }}/conf.d'
+      patterns:  '*.conf'
+      file_type: 'any'
+    register: global_extra_config_file_list
+
+  - name: 'get vhost available config file list'
+    find:
+      paths:     '{{ nginx_vars.conf_dir }}/sites-available'
+      patterns:  '*.conf'
+      file_type: 'any'
+    register: vhost_available_config_file_list
+
+  - name: 'get vhost enabled config file list'
+    find:
+      paths:     '{{ nginx_vars.conf_dir }}/sites-enabled'
+      patterns:  '*.conf'
+      file_type: 'any'
+    register: vhost_enabled_config_file_list
+
+  - name: 'cleanup global extra config file'
+    file:
+      state: 'absent'
+      path:  '{{ item }}'
+    notify:
+    - 'restarted service : nginx'
+    when:
+    - 'item|basename|splitext|first != "upstream"'
+    - 'item|basename|splitext|first not in nginx.global.keys()'
+    - 'item|basename|splitext|first not in nginx.extra.keys()'
+    with_items: '{{ global_extra_config_file_list.files | map(attribute="path") | list }}'
+
+  - name: 'cleanup vhost available config file'
+    file:
+      state: 'absent'
+      path:  '{{ item }}'
+    notify:
+    - 'restarted service : nginx'
+    when:
+    - 'item|basename|splitext|first not in nginx.vhosts.keys()'
+    with_items: '{{ vhost_available_config_file_list.files | map(attribute="path") | list }}'
+
+  - name: 'cleanup vhost enabled config file'
+    file:
+      state: 'absent'
+      path:  '{{ item }}'
+    notify:
+    - 'restarted service : nginx'
+    when:
+    - 'item|basename|splitext|first not in nginx.vhosts.keys()'
+    with_items: '{{ vhost_enabled_config_file_list.files | map(attribute="path") | list }}'
+
+  - name: 'dh parameter generation ( {{ nginx_vars.conf_dir }}/dhparam.pem )'
+    command: >
+      openssl dhparam -out {{ nginx_vars.conf_dir }}/dhparam.pem 2048
+    args:
+      creates: '{{ nginx_vars.conf_dir }}/dhparam.pem'
+    notify:
+    - 'restarted service : nginx'
+
+  - name: 'tls session tickets key generation ( {{ nginx_vars.conf_dir }}/ticket.key )'
+    command: >
+      openssl rand -out {{ nginx_vars.conf_dir }}/ticket.key 48
+    args:
+      creates: '{{ nginx_vars.conf_dir }}/ticket.key'
+    notify:
+    - 'restarted service : nginx'
+
+  - name: 'self-signed certificate - key ( {{ nginx_vars.conf_dir }}/server.key )'
+    command: >
+      openssl genrsa -out {{ nginx_vars.conf_dir }}/server.key 2048
+    args:
+      creates: '{{ nginx_vars.conf_dir }}/server.key'
+
+  - name: 'self-signed certificate - csr ( {{ nginx_vars.conf_dir }}/server.csr )'
+    command: >
+      openssl req -batch -new -subj "/CN=example.com"
+      -key {{ nginx_vars.conf_dir }}/server.key
+      -out {{ nginx_vars.conf_dir }}/server.csr
+    args:
+      creates: '{{ nginx_vars.conf_dir }}/server.csr'
+
+  - name: 'self-signed certificate - crt ( {{ nginx_vars.conf_dir }}/server.crt )'
+    command: >
+      openssl x509 -req -days 3650
+      -in {{ nginx_vars.conf_dir }}/server.csr
+      -signkey {{ nginx_vars.conf_dir }}/server.key
+      -out {{ nginx_vars.conf_dir }}/server.crt
+    args:
+      creates: '{{ nginx_vars.conf_dir }}/server.crt'
+
+  - name: 'secret files parmission'
+    file:
+      path:  '{{ item }}'
+      state: 'file'
+      owner: '{{ nginx_vars.root_owner }}'
+      group: '{{ nginx_vars.root_group }}'
+      mode:  '0400'
+    with_items:
+    - '{{ nginx_vars.conf_dir }}/dhparam.pem'
+    - '{{ nginx_vars.conf_dir }}/ticket.key'
+    - '{{ nginx_vars.conf_dir }}/server.key'
+    - '{{ nginx_vars.conf_dir }}/server.csr'
+    - '{{ nginx_vars.conf_dir }}/server.crt'
+
+  - name: 'global configuration ( {{ nginx_vars.conf_dir }}/nginx.conf )'
+    template:
+      src:   'nginx.conf.j2'
+      dest:  '{{ nginx_vars.conf_dir }}/nginx.conf'
+      owner: '{{ nginx_vars.root_owner }}'
+      group: '{{ nginx_vars.root_group }}'
+      mode:  '0444'
+    notify:
+    - 'restarted service : nginx'
+
+  - name: 'fastcgi_params configuration ( {{ nginx_vars.conf_dir }}/fastcgi_params )'
+    template:
+      src:   'fastcgi_params.j2'
+      dest:  '{{ nginx_vars.conf_dir }}/fastcgi_params'
+      owner: '{{ nginx_vars.root_owner }}'
+      group: '{{ nginx_vars.root_group }}'
+      mode:  '0444'
+    when: nginx.fastcgi_params is defined
+    notify:
+    - 'restarted service : nginx'
+
+  - name: 'upstream configuration ( {{ nginx_vars.conf_dir }}/conf.d/upstream.conf )'
+    template:
+      src:   'upstream.conf.j2'
+      dest:  '{{ nginx_vars.conf_dir }}/conf.d/upstream.conf'
+      owner: '{{ nginx_vars.root_owner }}'
+      group: '{{ nginx_vars.root_group }}'
+      mode:  '0444'
+    when: nginx.upstream is defined
+    notify:
+    - 'restarted service : nginx'
+
+  - name: 'global configuration'
+    template:
+      src:   'nginx.conf.d.j2'
+      dest:  '{{ nginx_vars.conf_dir }}/conf.d/{{ item.key }}.conf'
+      owner: '{{ nginx_vars.root_owner }}'
+      group: '{{ nginx_vars.root_group }}'
+      mode:  '0444'
+    with_dict: '{{ nginx.global }}'
+    when: nginx.global is defined
+    notify:
+    - 'restarted service : nginx'
+
+  - name: 'extra configuration'
+    template:
+      src:   'nginx.extra.conf.d.j2'
+      dest:  '{{ nginx_vars.conf_dir }}/conf.d/{{ item.key }}.conf'
+      owner: '{{ nginx_vars.root_owner }}'
+      group: '{{ nginx_vars.root_group }}'
+      mode:  '0444'
+    with_dict: '{{ nginx.extra }}'
+    when: nginx.extra is defined
+    notify:
+    - 'restarted service : nginx'
+
+  - name: 'defalt virtualhost configuration'
+    template:
+      src:   'vhost.conf.j2'
+      dest:  '{{ nginx_vars.conf_dir }}/sites-available/{{ item.key }}.conf'
+      owner: '{{ nginx_vars.root_owner }}'
+      group: '{{ nginx_vars.root_group }}'
+      mode:  '0444'
+    with_dict: '{{ nginx.vhosts }}'
+    when: item.key == 'default'
+
+  - name: 'default enabled virtualhost'
+    file:
+      state: 'link'
+      src:   '{{ nginx_vars.conf_dir }}/sites-available/{{ item.key }}.conf'
+      dest:  '{{ nginx_vars.conf_dir }}/sites-enabled/{{ item.key }}.conf'
+      owner: '{{ nginx_vars.root_owner }}'
+      group: '{{ nginx_vars.root_group }}'
+      mode:  '0444'
+    with_dict: '{{ nginx.vhosts }}'
+    when: item.key == 'default'
+
+  - name: 'service enabled ( {{ nginx_vars.service }} )'
+    service:
+      name:    '{{ nginx_vars.service }}'
+      enabled: 'yes'
+
+  - name: 'service started ( {{ nginx_vars.service }} )'
+    service:
+      name:  '{{ nginx_vars.service }}'
+      state: 'started'
+
+  - meta: flush_handlers
+
+  - name: 'letsencrypt ssl virtualhost'
+    command: >
+      {{ letsencrypt.bin_path }}
+      certonly
+      --text
+      --noninteractive
+      --webroot
+      -w {{ letsencrypt.work_dir }}
+      -m {{ letsencrypt.contact }}
+      -d {{ item.value.server_name }}
+      --renew-by-default
+      --agree-tos
+    args:
+      creates: '{{ letsencrypt.conf_dir }}/live/{{ item.value.server_name }}/fullchain.pem'
+    with_dict: '{{ nginx.vhosts }}'
+    when: (nginx.vhosts is defined) and
+      (item.value.letsencrypt is defined) and
+      (item.value.letsencrypt is sameas true)
+    notify:
+    - 'restarted service : nginx'
+    tags:
+    - letsencrypt
+
+  - name: 'letsencrypt deploy hook domain list'
+    set_fact:
+      letsencrypt_domains: '{{ nginx.vhosts.keys() | map("extract", nginx.vhosts) | selectattr("letsencrypt", "defined") | selectattr("letsencrypt", "sameas", true) | map(attribute="server_name") | list }}'
+    tags:
+    - letsencrypt
+
+  - name: 'letsencrypt deploy hook script'
+    template:
+      src:   'letsencrypt-deploy.j2'
+      dest:  '/etc/letsencrypt/renewal-hooks/deploy/nginx'
+      owner: '{{ letsencrypt.owner }}'
+      group: '{{ letsencrypt.group }}'
+      mode:  '0555'
+    when:
+    - letsencrypt_domains is defined
+    - letsencrypt_domains|length >= 1
+    tags:
+    - letsencrypt
+
+  - name: 'virtualhost configuration'
+    template:
+      src:   'vhost.conf.j2'
+      dest:  '{{ nginx_vars.conf_dir }}/sites-available/{{ item.key }}.conf'
+      owner: '{{ nginx_vars.root_owner }}'
+      group: '{{ nginx_vars.root_group }}'
+      mode:  '0444'
+    with_dict: '{{ nginx.vhosts }}'
+    when: nginx.vhosts is defined
+    notify:
+    - 'restarted service : nginx'
+
+  - name: 'enabled virtualhost'
+    file:
+      state: 'link'
+      src:   '{{ nginx_vars.conf_dir }}/sites-available/{{ item.key }}.conf'
+      dest:  '{{ nginx_vars.conf_dir }}/sites-enabled/{{ item.key }}.conf'
+      owner: '{{ nginx_vars.root_owner }}'
+      group: '{{ nginx_vars.root_group }}'
+      mode:  '0444'
+    with_dict: '{{ nginx.vhosts }}'
+    when: (nginx.vhosts is defined) and
+      ((item.value.enabled is defined) and (item.value.enabled is sameas true)) or
+      (not item.value.enabled is defined)
+    notify:
+    - 'restarted service : nginx'
+
+  - name: 'disabled virtualhost'
+    file:
+      state: 'absent'
+      path:  '{{ nginx_vars.conf_dir }}/sites-enabled/{{ item.key }}.conf'
+    with_dict: '{{ nginx.vhosts }}'
+    when: (nginx.vhosts is defined) and
+      (item.value.enabled is defined) and
+      (item.value.enabled is sameas false)
+    notify:
+    - 'restarted service : nginx'
+
+  # block
+  tags:
+  - web
+  - nginx

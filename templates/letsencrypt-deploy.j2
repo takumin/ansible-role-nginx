@@ -1,0 +1,16 @@
+#!/bin/sh
+
+reload=0
+
+for domain in ${RENEWED_DOMAINS}; do
+  case "${domain}" in
+{% for domain in letsencrypt_domains|sort %}
+    "{{ domain }}" ) reload=1; break;;
+{% endfor %}
+  esac
+done
+
+if [ "$reload" -eq 1 ]; then
+  echo "SSL certificate for nginx was modified."
+  service nginx reload
+fi

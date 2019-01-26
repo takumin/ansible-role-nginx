@@ -1,0 +1,14 @@
+---
+nginx_vars:
+  package:      'nginx'
+  service:      'nginx'
+  conf_dir:     '/etc/nginx'
+  ca_certs:     '/etc/ssl/cert.pem'
+  pid_path:     '/run/nginx.pid'
+  log_dir:      '/var/log/nginx'
+  cache_dir:    '/var/cache/nginx/proxy_cache'
+  owner:        'www-data'
+  group:        'www-data'
+  root_owner:   'root'
+  root_group:   'root'
+  event_notify: 'epoll'

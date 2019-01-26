@@ -1,0 +1,65 @@
+# {{ ansible_managed }}
+#
+# vhost {{ item.key }} configuration
+{##}
+{# letsencrypt #}
+{##}
+{% if item.value['letsencrypt'] is defined %}
+{%   if item.value['letsencrypt'] %}
+server {
+  listen {{ ansible_default_ipv4.address }}:80;
+  server_name {{ item.value['server_name'] }};
+  location ^~ /.well-known/acme-challenge/ {
+    default_type "text/plain";
+    root {{ letsencrypt.work_dir }};
+    try_files $uri =444;
+  }
+  location / {
+    return 301 https://$host$request_uri;
+  }
+}
+{%   endif %}
+{% endif %}
+server {
+{##}
+{# listen #}
+{##}
+{% if item.value['listen'] is defined %}
+{%   if item.value['listen'] is string %}
+  listen {{ item.value['listen'] }};
+{%   elif item.value['listen'] is sequence %}
+{%     for items in item.value['listen'] %}
+  listen {{ items }};
+{%     endfor %}
+{%   endif %}
+{% else %}
+  listen {{ ansible_default_ipv4.address }}:80;
+{% endif %}
+{##}
+{# server_name #}
+{##}
+{% if item.value['server_name'] is defined %}
+  server_name {{ item.value['server_name'] }};
+{% else %}
+  server_name {{ item.key }};
+{% endif %}
+{##}
+{# letsencrypt #}
+{##}
+{% if item.value['letsencrypt'] is defined %}
+{%   if item.value['letsencrypt'] %}
+  ssl_stapling on;
+  ssl_stapling_verify on;
+  ssl_certificate {{ letsencrypt.conf_dir }}/live/{{ item.value['server_name'] }}/fullchain.pem;
+  ssl_certificate_key {{ letsencrypt.conf_dir }}/live/{{ item.value['server_name'] }}/privkey.pem;
+  ssl_trusted_certificate {{ letsencrypt.conf_dir }}/live/{{ item.value['server_name'] }}/cert.pem;
+  add_header Strict-Transport-Security 'max-age=31536000; includeSubDomains;' always;
+{%   endif %}
+{% endif %}
+{##}
+{# extra_params #}
+{##}
+{% if item.value['extra_params'] is defined %}
+{{ item.value['extra_params']|indent(2, true) }}
+{% endif %}
+}

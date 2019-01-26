@@ -1,0 +1,86 @@
+---
+nginx_repository: 'http://nginx.org/packages/mainline/{{ ansible_distribution.lower() }}'
+nginx:
+  worker_processes:   'auto'
+  worker_connections: '1024'
+
+  global:
+    default:
+      server_tokens:    'off'
+    ssl:
+      ssl_dhparam:               '{{ nginx_vars.conf_dir }}/dhparam.pem'
+      ssl_session_tickets:       'on'
+      ssl_session_ticket_key:    '{{ nginx_vars.conf_dir }}/ticket.key'
+      ssl_session_cache:         'shared:SSL:10m'
+      ssl_session_timeout:       '10m'
+      ssl_prefer_server_ciphers: 'on'
+      ssl_protocols:
+      - 'TLSv1.2'
+      ssl_ciphers:
+      - 'ECDHE+RSAGCM'
+      - 'ECDH+AESGCM'
+      - 'DH+AESGCM'
+      - 'ECDH+AES256'
+      - 'DH+AES256'
+      - 'ECDH+AES128'
+      - 'DH+AES'
+      - '!aNULL!eNull'
+      - '!EXPORT'
+      - '!DES'
+      - '!3DES'
+      - '!MD5'
+      - '!DSS'
+
+  fastcgi_params:
+    QUERY_STRING:      '$query_string'
+    REQUEST_METHOD:    '$request_method'
+    CONTENT_TYPE:      '$content_type'
+    CONTENT_LENGTH:    '$content_length'
+    SCRIPT_FILENAME:   '$document_root$fastcgi_script_name'
+    SCRIPT_NAME:       '$fastcgi_script_name'
+    PATH_INFO:         '$fastcgi_path_info'
+    PATH_TRANSLATED:   '$document_root$fastcgi_path_info'
+    REQUEST_URI:       '$request_uri'
+    DOCUMENT_URI:      '$document_uri'
+    DOCUMENT_ROOT:     '$document_root'
+    SERVER_PROTOCOL:   '$server_protocol'
+    GATEWAY_INTERFACE: 'CGI/1.1'
+    SERVER_SOFTWARE:   'nginx'
+    REMOTE_ADDR:       '$remote_addr'
+    REMOTE_PORT:       '$remote_port'
+    SERVER_ADDR:       '$server_addr'
+    SERVER_PORT:       '$server_port'
+    SERVER_NAME:       '$server_name'
+    HTTPS:             '$https'
+    REDIRECT_STATUS:   '200'
+
+  vhosts:
+    default:
+      listen:
+      - 'localhost:80 default_server'
+      - '{{ ansible_default_ipv4.address }}:80 default_server'
+      server_name: '_'
+      extra_params: |-
+        location /nginx_status {
+          stub_status on;
+          access_log off;
+          allow 127.0.0.1;
+          deny all;
+        }
+        location /.well-known/acme-challenge/ {
+          default_type "text/plain";
+          root {{ letsencrypt.work_dir }};
+          try_files $uri =444;
+        }
+        location / {
+          return 444;
+        }
+    default_ssl:
+      listen:
+      - 'localhost:4443 ssl http2 default_server'
+      - '{{ ansible_default_ipv4.address }}:4443 ssl http2 default_server'
+      server_name: '_'
+      extra_params: |-
+        ssl_certificate {{ nginx_vars.conf_dir }}/server.crt;
+        ssl_certificate_key {{ nginx_vars.conf_dir }}/server.key;
+        return 444;

@@ -1,0 +1,8 @@
+---
+- name: 'restarted service : nginx'
+  service:
+    name:  '{{ nginx_vars.service }}'
+    state: restarted
+  tags:
+  - web
+  - nginx

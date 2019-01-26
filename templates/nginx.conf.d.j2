@@ -1,0 +1,12 @@
+# {{ ansible_managed }}
+#
+
+{% for key, value in item.value.iteritems()|sort() %}
+{%   if key == 'ssl_protocols' %}
+{{ key }} {{ value|join(' ') }};
+{%   elif key == 'ssl_ciphers' %}
+{{ key }} {{ value|join(':') }};
+{%   else %}
+{{ key }} {{ value }};
+{%   endif %}
+{% endfor %}

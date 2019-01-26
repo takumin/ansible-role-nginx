@@ -1,0 +1,30 @@
+# {{ ansible_managed }}
+#
+
+fastcgi_param QUERY_STRING      {{ nginx.fastcgi_params.QUERY_STRING }};
+fastcgi_param REQUEST_METHOD    {{ nginx.fastcgi_params.REQUEST_METHOD }};
+fastcgi_param CONTENT_TYPE      {{ nginx.fastcgi_params.CONTENT_TYPE }};
+fastcgi_param CONTENT_LENGTH    {{ nginx.fastcgi_params.CONTENT_LENGTH }};
+
+fastcgi_param SCRIPT_FILENAME   {{ nginx.fastcgi_params.SCRIPT_FILENAME }};
+fastcgi_param SCRIPT_NAME       {{ nginx.fastcgi_params.SCRIPT_NAME }};
+fastcgi_param PATH_INFO         {{ nginx.fastcgi_params.PATH_INFO }};
+fastcgi_param PATH_TRANSLATED   {{ nginx.fastcgi_params.PATH_TRANSLATED }};
+fastcgi_param REQUEST_URI       {{ nginx.fastcgi_params.REQUEST_URI }};
+fastcgi_param DOCUMENT_URI      {{ nginx.fastcgi_params.DOCUMENT_URI }};
+fastcgi_param DOCUMENT_ROOT     {{ nginx.fastcgi_params.DOCUMENT_ROOT }};
+fastcgi_param SERVER_PROTOCOL   {{ nginx.fastcgi_params.SERVER_PROTOCOL }};
+
+fastcgi_param GATEWAY_INTERFACE {{ nginx.fastcgi_params.GATEWAY_INTERFACE }};
+fastcgi_param SERVER_SOFTWARE   {{ nginx.fastcgi_params.SERVER_SOFTWARE }};
+
+fastcgi_param REMOTE_ADDR       {{ nginx.fastcgi_params.REMOTE_ADDR }};
+fastcgi_param REMOTE_PORT       {{ nginx.fastcgi_params.REMOTE_PORT }};
+fastcgi_param SERVER_ADDR       {{ nginx.fastcgi_params.SERVER_ADDR }};
+fastcgi_param SERVER_PORT       {{ nginx.fastcgi_params.SERVER_PORT }};
+fastcgi_param SERVER_NAME       {{ nginx.fastcgi_params.SERVER_NAME }};
+
+fastcgi_param HTTPS             {{ nginx.fastcgi_params.HTTPS }};
+
+# PHP only, required if PHP was built with --enable-force-cgi-redirect
+fastcgi_param REDIRECT_STATUS   {{ nginx.fastcgi_params.REDIRECT_STATUS }};
